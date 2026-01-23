@@ -5,6 +5,12 @@ k = 200;
 % We have L labs 
 L = 300;
 
+average_fraction_missing_metabolites = .5; % approx what proportion of 
+                                           % metabolites
+                                           % are missing (1 = all missing
+                                           % 0 = none missing)
+                                           % sampled as iid bernoulli
+
 % Each lab has a state vector Gamma_l which is a one hot binary vector
 % Gamma_l,j = 1 iff lab is in state j. Let's say j = 1...r, maybe r=2 
 r = 2;
@@ -42,10 +48,27 @@ for j=1:r
     assert(min(eig(rho_state{j}))>= 0, ...
         "Non-PSD matrix found for simulation rho_i.")
 end
+clear j
 
 % Generate subject level data for each lab
 subject_data = {}; % subject_data{i} is design matrix for 
                          % ith lab
+% Define a mask for each lab: 1 for non-missing, 0 for missing
+% subject_data_mask{l} is a binary vector of length n_subjects(l)
+% Lab l only "really" collects data for unmasked (mask=1) metabolites
+subject_data_mask = {};  % 1 = non-missing, 0 = missing
+
+% Also for each lab, calculate the spearman rank correlation estimate
+% The spearman correlation estimates only are reported to the analyst
+% We also need a mask for spearman correlation entries, corresponding
+% to pairs 1<=(j1,j2)<=k where mask=1 iff metabolites j1,j2 both 
+% collected at lab l
+% reported_spearman{l}(j1,j2) at a mask=0 location will be 0 and is 
+% not meaningful
+
+reported_spearman = {};
+reported_spearman_mask = {}; % 1 = non-missing, 0 = missing
+
 for l=1:L
     mu = zeros(1,k);                   % Centered mean for simplicity
     lab_state = find(Gamma(l,:));      % Latent state for this lab = 
@@ -54,6 +77,31 @@ for l=1:L
     subject_data{l} = mvnrnd(mu,...
                              Sigma, ...
                              n_subjects(l));
+
+
+    % Generate a random mask matrix for lab l
+    p = 1-average_fraction_missing_metabolites; %p = 0 means none are missing
+    covariate_mask = rand(1,k) < p; % 1 if non-missing
+    subject_data_mask{l} = covariate_mask;
+    
+    % Mask out the missing data: that is, set them to 0. These 0's
+    % are meaningless placeholders (don't interpret as data = 0!)
+    subject_data{l}(:,covariate_mask==0)=0; 
+    
+    % The following has some entries masked out. Those entries are zero
+    % and are meaningless
+    reported_spearman{l} = corr(subject_data{l},'Type','Spearman');
+    reported_spearman_mask{l} = ones(k,k);
+    reported_spearman_mask{l}(:,covariate_mask==0)=0;
+    reported_spearman_mask{l}(covariate_mask==0,:)=0;
+    reported_spearman{l}(reported_spearman_mask{l}==0)=0; % zero out 
+                                                          % masked entries
+
 end
+clear mu lab_state Sigma l mask p covariate_mask;
+
+% The observable data (available to the analyst) consists of
+% reported_spearman, and reported_spearman_mask
+
 
 %% Using simulated data (lab aggregates only), estimate correlation matrix
