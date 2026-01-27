@@ -1,4 +1,9 @@
+%% Set path
+addpath('./src')
+
 %% Simulate data
+
+tic
 
 % We have k metabolites
 k = 200;
@@ -103,5 +108,34 @@ clear mu lab_state Sigma l mask p covariate_mask;
 % The observable data (available to the analyst) consists of
 % reported_spearman, and reported_spearman_mask
 
+data_generation_time = toc;
+fprintf("Simulated data generation complete. Took %.2f seconds.\n",...
+    data_generation_time);
+
 
 %% Using simulated data (lab aggregates only), estimate correlation matrix
+
+% We have access to lab sample sizes, reported_spearman and 
+% reported_spearman mask in this section. 
+
+% First we need to place the matrices into vector form 
+% The vech function flattens the upper triangular entries of a matrix
+% and is a bijection from symmetric matrices to vectors
+
+reported_spearman_vecL = cellfun(@vecL,reported_spearman,...
+                                    'UniformOutput',false);
+reported_spearman_mask_vecL = cellfun(@vecL,reported_spearman_mask,...
+                                        'UniformOutput',false);
+
+% For each l, find the permutation matrix P_l that puts missing entries 
+% below observed entries. Let [X Z]' = P_l * vecL(reported_spearman)
+P = {};
+X = {};
+Z = {};
+for l=1:L
+    P{l} = getMaskOrderingMatrix(reported_spearman_mask_vecL{l});
+    num_observed = sum(reported_spearman_mask_vecL{l});
+    X_Z = P{l}*reported_spearman_vecL{l};
+    X{l} = X_Z(1:num_observed);
+    Z{l} = X_Z((num_observed+1):end);
+end
