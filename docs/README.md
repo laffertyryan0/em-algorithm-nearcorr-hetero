@@ -19,10 +19,12 @@ One problem in multi-site studies with large numbers of variables is that not ev
 Fundamental insight: 
 - If I know something about the relationship between variables $A$ and $B$ based on dataset 1
 - And I know something about the relationship between variables $B$ and $C$ based on dataset 2
-- I can infer population-level information about the relationship between $A$ and $C$, even though $A$ and $C$ never appear together in either dataset
+- I automatically know something about the relationship between $A$ and $C$, even though $A$ and $C$ never appear together in either dataset
 
 The following is an illustration of the proposed methodology: 
 
 
 
 ![Alt text](./img/diagram.svg )
+
+To use this project, run `entry.m`. Explanatory notes are provided as in-line comments. 
