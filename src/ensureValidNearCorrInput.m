@@ -8,8 +8,8 @@ function out = ensureValidNearCorrInput(inputMatrix,tol)
     matrix = inputMatrix;
     k = length(matrix);
     matrix = matrix - diag(diag(matrix)) + eye(k);
-    matrix((matrix >= 1) & ~eye(k)) = 1-1e-8; 
-    matrix((matrix <= -1) & ~eye(k)) = -1+1e-8;
+    matrix((matrix >= 1) & ~eye(k)) = 1; 
+    matrix((matrix <= -1) & ~eye(k)) = -1;
     out = matrix;
     if max(abs(out-inputMatrix),[],'all')>tol
         warning(...
