@@ -129,13 +129,53 @@ reported_spearman_mask_vecL = cellfun(@vecL,reported_spearman_mask,...
 
 % For each l, find the permutation matrix P_l that puts missing entries 
 % below observed entries. Let [X Z]' = P_l * vecL(reported_spearman)
-P = {};
-X = {};
-Z = {};
+P = {}; 
+X = {}; % Consists of all observed entries. 
+        % Z here would be represented as all 0's due to the masking, but 
+        % really Z means unobserved data. 
+
 for l=1:L
     P{l} = getMaskOrderingMatrix(reported_spearman_mask_vecL{l});
     num_observed = sum(reported_spearman_mask_vecL{l});
     X_Z = P{l}*reported_spearman_vecL{l};
     X{l} = X_Z(1:num_observed);
-    Z{l} = X_Z((num_observed+1):end);
+end
+
+MAX_EM_ITERATIONS = 1; % Outer loop
+MAX_GD_ITERATIONS = 1; % Inner PGD loop
+GD_TOLERANCE = .001;
+GD_LEARNING_RATE = 0.01;
+
+% Initialize EM parameters
+alpha_est = rand(1,r);
+alpha_est = alpha_est/sum(alpha_est); % Random initialization
+rho_est = cell(1,L);
+sigma_rho_est = cell(1,L);
+for l = 1:L
+    rho_est{l} = vecL(randomCorrelationMatrix(k)); % Random initialization
+    sigma_rho_est = speye(k*(k-1)/2)/...
+                     sqrt(n_subjects(l));
+end
+
+
+for em_iter=1:MAX_EM_ITERATIONS
+    % Update the EM using the following formula: 
+    % theta^{(t+1)} = argmax_{theta_tilde} Q(theta_tilde | theta^{(t)})
+    % Here, theta represents the current estimate of parameters:
+    % alpha_est: a r-dimensional vector of mixing probabilities
+    % rho_est: a cell array of L cells, where rho_est{l} is a 
+    %          vector of length k(k-1)/2. (A vectorized correlation matrix)
+    % sigma_rho_est: a cell array of L cells, where sigma_est{l} is a 
+    %              (k(k-1)/2) x (k(k-1)/2) covariance matrix.
+    % For now, we will not estimate sigma_rho_est, but just let it remain 
+    % fixed. Later, we will try to show that this is a good approximation.
+
+    [alpha_est,rho_est,sigma_rho_est] = argmaxQ(alpha_est,...
+                                                rho_est,...
+                                                sigma_rho_est, ...
+                                                P, ...
+                                                GD_LEARNING_RATE,...
+                                                MAX_GD_ITERATIONS, ...
+                                                GD_TOLERANCE);
+    fprintf("EM Iteration Number: %d\n",em_iter);
 end
