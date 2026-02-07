@@ -32,7 +32,7 @@ sigma_rho_tilde = sigma_rho_est;
 iteration = 1;
 norm_grad = Inf;
 % Step 2: Loop until max_iterations or ||gradient|| < tol
-while iteration < max_iterations & norm_grad >= tol
+while iteration <= max_iterations & norm_grad >= tol
     iteration = iteration + 1;
 
     % Step 2.1: Compute derivative of Q for optimization (tilde) variables
@@ -46,9 +46,8 @@ while iteration < max_iterations & norm_grad >= tol
                 % call it C. This will multiply pr_g_given_x_lsum
                 % to get the (r-1) dimensional alpha~ gradient vector
                 C = zeros(r-1,r);
-                C(1:(r-1),1:(r-1)) = diag(1./alpha_tilde);
+                C(1:(r-1),1:(r-1)) = diag(1./alpha_tilde(1:(r-1)));
                 C(:,r) = -1/alpha_tilde(r);
-                
 
                 gradient_rho_tilde = cell(1,L); % k(k-1)/2-vector for each 
                                                 % cell l
@@ -56,8 +55,15 @@ while iteration < max_iterations & norm_grad >= tol
                     gradient_rho_tilde{l} = zeros(len_rho,1);
                 end
     % Step 2.2: Apply the gradient step to optimization (tilde) variables
-                alpha_tilde = alpha_tilde - ...
-                             learning_rate*gradient_alpha_tilde;
+
+                alpha_tilde(1:(r-1)) = alpha_tilde(1:(r-1)) - ...
+                               learning_rate*gradient_alpha_tilde(1:(r-1));
+                % Only use the gradient to update the unconstrained alphas
+                % The constrained (rth) alpha is updated by the constraint
+                alpha_tilde(r) = 1-sum(alpha_tilde(1:(r-1)));
+                % TODO: we probably need to worry about alpha>=0
+                % constraint! Use projection for this
+
                 for l=1:L
                     rho_tilde{l} = rho_tilde{l} - ...
                                    learning_rate*gradient_rho_tilde{l};
