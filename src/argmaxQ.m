@@ -36,7 +36,20 @@ while iteration < max_iterations & norm_grad >= tol
     iteration = iteration + 1;
 
     % Step 2.1: Compute derivative of Q for optimization (tilde) variables
-                gradient_alpha_tilde = zeros(1,r); % r vector
+                gradient_alpha_tilde = zeros(1,r); % r vector TODO
+
+                % Prob (Gamma_lj = 1 | X, theta)
+                pr_g_given_x = zeros(L,r); % TODO
+                pr_g_given_x_lsum = sum(pr_g_given_x,1); % sum over l index
+                
+                % (r-1)xr matrix with entries ((1/a_j) d_jk - (1/a_j)d_jr)
+                % call it C. This will multiply pr_g_given_x_lsum
+                % to get the (r-1) dimensional alpha~ gradient vector
+                C = zeros(r-1,r);
+                C(1:(r-1),1:(r-1)) = diag(1./alpha_tilde);
+                C(:,r) = -1/alpha_tilde(r);
+                
+
                 gradient_rho_tilde = cell(1,L); % k(k-1)/2-vector for each 
                                                 % cell l
                 for l = 1:L
