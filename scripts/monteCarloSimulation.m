@@ -5,21 +5,27 @@ addpath('../src')
 %% Fix Parameters
 
 num_metabolites = 50; %k
-num_labs = 1000; %L
-average_fraction_missing_metabolites = 0.3;
+num_labs = 60; %L
+average_fraction_missing_metabolites = 0.4;
 num_mixture_components = 2; %r
 mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
-num_subjects_per_lab = ones(num_labs,1)*1000;  
+num_subjects_per_lab = ones(num_labs,1)*100;  
 
-rng(5); % Set seed for the whole simulation 
+rng(6); % Set seed for the whole simulation 
 rho_state = {};
 for j=1:num_mixture_components
-    rho_state{j} = randomCorrelationMatrix(num_metabolites);
+    rho_state{j} = .5*ones(num_metabolites,num_metabolites) + ...
+        .5*randomCorrelationMatrix(num_metabolites);
     if j==2
         rho_state{j} = eye(num_metabolites,num_metabolites);
     end
     assert(min(eig(rho_state{j}))>= 0, ...
         "Non-PSD matrix found for simulation rho_i.")
+end
+% Generate a random mask matrix for lab l
+p = 1-average_fraction_missing_metabolites; %p = 0 means none are missing
+for l=1:num_labs;
+    subject_data_mask{l} = rand(1,num_metabolites) < p; % 1 if non-missing
 end
 
 %% Begin Monte Carlo Loop
@@ -39,6 +45,7 @@ for mc_step = 1:MC_STEPS
                                   num_labs, ...
                                   average_fraction_missing_metabolites, ...
                                   num_mixture_components, ...
+                                  subject_data_mask,...
                                   rho_state,...
                                   mixing_probabilities,...
                                   num_subjects_per_lab,...
@@ -93,7 +100,7 @@ for mc_step = 1:MC_STEPS
     GD_TOLERANCE = 1;
     GD_LEARNING_RATE = 100*(.2/num_labs)/max(n_samples);
     INIT_GDVARS_RANDLY = true;
-    NEARCORR_PROJ = true; % Do the correlation projection in the gd loop
+    NEARCORR_PROJ = false; % Do the correlation projection in the gd loop
     
     
     % Initialize EM parameters
@@ -149,13 +156,13 @@ for mc_step = 1:MC_STEPS
             order = inferComponentOrder(estimated,actual);
         
             % Append new values to plotvar metrics
-            for j=1:r
-                estimated = rho_est_fisherinv{order(j)};
-                actual = vecL(true_rho{j});
-                plotvar_mse{j}(em_iter) = norm(estimated-actual,2);
-                plotvar_bias{j}(em_iter) = mean(estimated-actual);
-            end
-    
+            % for j=1:r
+            %     estimated_j = rho_est_fisherinv{order(j)};
+            %     actual_j = vecL(true_rho{j});
+            %     plotvar_mse{j}(em_iter) = norm(estimated_j-actual_j,2);
+            %     plotvar_bias{j}(em_iter) = mean(estimated_j-actual_j);
+            % end
+            % 
         % Show current alpha estimate
     
         % Update the EM using the following formula: 
@@ -194,15 +201,19 @@ for mc_step = 1:MC_STEPS
     
        
     end
-    final_rho_estimates{mc_step} = rho_est_fisherinv;
+    final_rho_estimates{mc_step} = {};
+    for j=1:r
+        final_rho_estimates{mc_step}{j} = ...
+            vecLInverse(rho_est_fisherinv{1,order(j)}); % last inferred order
+    end
 end
 
-for m1=1:1
-   for m2=(m1+1):2
+for m1=1:3
+   for m2=(m1+1):4
         for j=1:r
             coef_ests = [];
             for step = 1:mc_step
-                coef_est = vecLInverse(final_rho_estimates{step}{j});
+                coef_est = final_rho_estimates{step}{j};
                 coef_ests = [coef_ests;...
                     coef_est(m1,m2)];
             end
