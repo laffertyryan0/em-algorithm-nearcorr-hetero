@@ -6,14 +6,14 @@ addpath('../src')
 
 num_metabolites = 50; %k
 num_labs = 1000; %L
-average_fraction_missing_metabolites = 0.7;
+average_fraction_missing_metabolites = 0.3;
 num_mixture_components = 2; %r
 mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
 num_subjects_per_lab = ones(num_labs,1)*1000;  
 
 rng(5); % Set seed for the whole simulation 
 rho_state = {};
-for j=1:r
+for j=1:num_mixture_components
     rho_state{j} = randomCorrelationMatrix(num_metabolites);
     if j==2
         rho_state{j} = eye(num_metabolites,num_metabolites);
@@ -24,7 +24,9 @@ end
 
 %% Begin Monte Carlo Loop
 
-MC_STEPS = 10;
+final_rho_estimates = {};
+
+MC_STEPS = 50;
 for mc_step = 1:MC_STEPS
     
     [reported_spearman,...
@@ -191,5 +193,30 @@ for mc_step = 1:MC_STEPS
                                                     em_iter);
     
        
+    end
+    final_rho_estimates{mc_step} = rho_est_fisherinv;
+end
+
+for m1=1:1
+   for m2=(m1+1):2
+        for j=1:r
+            coef_ests = [];
+            for step = 1:mc_step
+                coef_est = vecLInverse(final_rho_estimates{step}{j});
+                coef_ests = [coef_ests;...
+                    coef_est(m1,m2)];
+            end
+            figure,
+            hist(coef_ests);
+            disp("Mean")
+            disp(mean(coef_ests))
+            disp("Std")
+            disp(std(coef_ests))
+            title(strcat("Histogram of Correlation Estimates: ",...
+                               string(m1)," vs. ",...
+                               string(m2),...
+                               " Component: ",...
+                               string(j)))
+        end
     end
 end
