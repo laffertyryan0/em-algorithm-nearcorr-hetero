@@ -11,17 +11,24 @@ USE_REAL_DATA = false;
 if ~USE_REAL_DATA
     num_metabolites = 50; %k
     num_labs = 60; %L
-    average_fraction_missing_metabolites = 0.7;
+    average_fraction_missing_metabolites = 0.3;
     num_mixture_components = 2; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
     num_subjects_per_lab = ones(num_labs,1)*1000; 
-    random_seed = 19;    
+    random_seed = 25;    
 
     rho_state = {};
     for j=1:r
         rho_state{j} = randomCorrelationMatrix(num_metabolites);
         if j==2
             rho_state{j} = eye(num_metabolites,num_metabolites);
+        end
+        if j==1
+           rho_state{j} = patternedBlockCorrelation(num_metabolites, ...
+                                                .7, ...
+                                                20, ...
+                                                20,...
+                                                .1);
         end
         assert(min(eig(rho_state{j}))>= 0, ...
             "Non-PSD matrix found for simulation rho_i.")
@@ -158,7 +165,7 @@ MAX_GD_ITERATIONS = 1; % Inner PGD loop
 GD_TOLERANCE = 1;
 GD_LEARNING_RATE = 100*(.2/num_labs)/max(n_samples);
 INIT_GDVARS_RANDLY = true;
-NEARCORR_PROJ = true; % Do the correlation projection in the gd loop
+NEARCORR_PROJ = false; % Do the correlation projection in the gd loop
 
 
 % Initialize EM parameters
