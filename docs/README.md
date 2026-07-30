@@ -3,8 +3,7 @@
 Studying the statistical relationships between metabolites in a population may help researchers:
 - Understand metabolic pathways
 - Identify drug interactions
-- Conceive new therapeutic approaches
-- More!
+- Suggest new therapeutic approaches
 
 Metabolomic research may take place in a consortium setting, where members of the consortium share **aggregate-level information** such as:
 - Sample size
