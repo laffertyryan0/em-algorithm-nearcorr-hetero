@@ -11,11 +11,11 @@ USE_REAL_DATA = false;
 if ~USE_REAL_DATA
     num_metabolites = 50; %k
     num_labs = 60; %L
-    average_fraction_missing_metabolites = 0.3;
-    num_mixture_components = 2; %r
+    average_fraction_missing_metabolites = 0.5;
+    num_mixture_components = 1; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
     num_subjects_per_lab = ones(num_labs,1)*1000; 
-    random_seed = 25;    
+    random_seed = 26;    
 
     rho_state = {};
     for j=1:r

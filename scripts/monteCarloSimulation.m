@@ -6,7 +6,7 @@ addpath('../src')
 
 num_metabolites = 50; %k
 num_labs = 60; %L
-average_fraction_missing_metabolites = 0.5;
+average_fraction_missing_metabolites = 0.0;
 num_mixture_components = 2; %r
 mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
 num_subjects_per_lab = ones(num_labs,1)*100;  
@@ -39,7 +39,7 @@ end
 
 final_rho_estimates = {};
 
-MC_STEPS = 5;
+MC_STEPS = 200;
 for mc_step = 1:MC_STEPS
     
     [reported_spearman,...
@@ -274,6 +274,9 @@ save(save_filename);
 % Set this to load a different workspace
 LOAD_FILENAME = [];
 
+% missing percent: .5
+LOAD_FILENAME = "../artifacts/mcruns/mcrun_20260610_204433";
+
 if ~isempty(LOAD_FILENAME)
     load(LOAD_FILENAME);
 else
@@ -329,7 +332,7 @@ end
 
 %% Create plots
 
-num_rows = 5;
+num_rows = 8;
 for j=1:r
     figure, 
     for m1=1:num_rows
@@ -350,7 +353,7 @@ for j=1:r
                     coef_est_naive(m1,m2)];
             end
             plotidx = (m1-1)*(num_rows+1) + m2;
-            subplot(6,6,plotidx)
+            subplot(num_rows+1,num_rows+1,plotidx)
             hold on
            histogram(coef_ests-coef_act,'Normalization','probability', ...
                FaceColor='red');
@@ -361,10 +364,25 @@ for j=1:r
                 'Normalization','probability',...
                 FaceColor='green');
             hold off
-
+            legend
         end           
     end
     sgtitle(strcat("Histogram of Correlation Estimates: ",...
                                " Component: ",...
                                string(j)))
+end
+
+for j=1:r
+    figure,
+    heatmap(metrics.nearcorr.mae{j}-metrics.no_proj.mae{j})
+    title(strcat("Component ",string(j),...
+        " -- MAE with proj - MAE without proj"));
+    figure,
+    heatmap(metrics.nearcorr.mse{j}-metrics.no_proj.mse{j})
+    title(strcat("Component ",string(j),...
+        " -- MSE with proj - MSE without proj"));
+    figure,
+    heatmap(metrics.nearcorr.trim_mean{j}-metrics.no_proj.trim_mean{j})
+        title(strcat("Component ",string(j),...
+            " -- 20% Trimmed MAE with proj - 20% Trimmed MAE without proj"));
 end
