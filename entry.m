@@ -9,22 +9,34 @@ USE_REAL_DATA = false;
    
 
 if ~USE_REAL_DATA
-    num_metabolites = 50; %k
-    num_labs = 1000; %L
+    num_metabolites = 5%0; %k
+    num_labs = 60; %L
     average_fraction_missing_metabolites = 0.7;
-    num_mixture_components = 2; %r
+    num_mixture_components = 1; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
     num_subjects_per_lab = ones(num_labs,1)*1000; 
-    random_seed = 19;    
+    random_seed = 26;    
 
     rho_state = {};
-    for j=1:r
+    for j=1:num_mixture_components
         rho_state{j} = randomCorrelationMatrix(num_metabolites);
         if j==2
             rho_state{j} = eye(num_metabolites,num_metabolites);
         end
+        if j==1
+           rho_state{j} = patternedBlockCorrelation(num_metabolites, ...
+                                                .7, ...
+                                                20, ...
+                                                20,...
+                                                .1);
+        end
         assert(min(eig(rho_state{j}))>= 0, ...
             "Non-PSD matrix found for simulation rho_i.")
+    end
+    % Generate a random mask matrix for lab l
+    p = 1-average_fraction_missing_metabolites; %p = 0 means none are missing
+    for l=1:num_labs;
+        subject_data_mask{l} = rand(1,num_metabolites) < p; % 1 if non-missing
     end
 
     [reported_spearman,...
@@ -37,6 +49,7 @@ if ~USE_REAL_DATA
                                   num_labs, ...
                                   average_fraction_missing_metabolites, ...
                                   num_mixture_components, ...
+                                  subject_data_mask,...
                                   rho_state,...
                                   mixing_probabilities,...
                                   num_subjects_per_lab,...
@@ -152,7 +165,7 @@ MAX_GD_ITERATIONS = 1; % Inner PGD loop
 GD_TOLERANCE = 1;
 GD_LEARNING_RATE = 100*(.2/num_labs)/max(n_samples);
 INIT_GDVARS_RANDLY = true;
-NEARCORR_PROJ = true; % Do the correlation projection in the gd loop
+NEARCORR_PROJ = false; % Do the correlation projection in the gd loop
 
 
 % Initialize EM parameters
@@ -170,7 +183,7 @@ for j = 1:r
         speye(num_metabolites*(num_metabolites-1)/2);  
 end
 
-w = 1000./n_samples; % Lab-wise weighting factor for ...
+w = 1./n_samples; % Lab-wise weighting factor for ...
                                  % variances (L vector)
 
 % Metrics to track for plotting. All should have prefix plotvar
@@ -253,6 +266,27 @@ for em_iter=1:MAX_EM_ITERATIONS
 
    
 end
+
+    rho_FI_est = louisFisherEst(...
+                                                alpha_est,...
+                                                rho_est,...
+                                                sigma_rho_est, ...
+                                                X, ...
+                                                P, ...
+                                                w, ...
+                                                GD_LEARNING_RATE,...
+                                                MAX_GD_ITERATIONS, ...
+                                                GD_TOLERANCE, ...
+                                                INIT_GDVARS_RANDLY, ...
+                                                NEARCORR_PROJ, ...
+                                                em_iter);
+    a = .05;
+    std_err = sqrt(abs(diag(inv(rho_FI_est))));
+    disp(std_err');
+    CI_upper = rho_est{1} + norminv(1-a/2)*std_err;
+    CI_lower = rho_est{1} - norminv(1-a/2)*std_err;
+    CI = [CI_lower CI_upper];
+    disp(CI)
 
 %pearson_rho_est is the final estimate for the mean correlation matrix
 

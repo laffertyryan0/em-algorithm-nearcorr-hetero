@@ -2,3 +2,4 @@
 *.excalidraw
 ./outputs
 data/*
+artifacts/*
