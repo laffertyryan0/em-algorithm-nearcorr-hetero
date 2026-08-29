@@ -5,19 +5,21 @@ addpath('../src')
 
 metrics_by_missingness = {};
 
-missing_iters = 30; %.0 to .9 = 1 to 10
-max_mi = 1;
-missingnesses = ((1:missing_iters)-1)*(max_mi/missing_iters);
+CIs = {};
+
+missing_iters = 3; %.0 to .9 = 1 to 10
+max_mi = .9;
+missingnesses = [.7,.8,.9]%((1:missing_iters)-1)*(max_mi/missing_iters);
 for missing_iter = 1:missing_iters
     
     %% Fix Parameters
     
-    num_metabolites = 50; %k
+    num_metabolites = 5; %k
     num_labs = 60; %L
     average_fraction_missing_metabolites = missingnesses(missing_iter);
     num_mixture_components = 1; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
-    num_subjects_per_lab = ones(num_labs,1)*1000;
+    num_subjects_per_lab = ones(num_labs,1)*100;
     
     rng(6); % Set seed for the whole simulation 
     rho_state = {};
@@ -28,7 +30,13 @@ for missing_iter = 1:missing_iters
             rho_state{j} = eye(num_metabolites,num_metabolites);
         end
         if j==1
-           rho_state{j} = patternedBlockCorrelation(num_metabolites, ...
+           % rho_state{j} =  [1.0000    0.5224    0.9635   -0.5412    0.3000
+           %                  0.5224    1.0000    0.2892   -0.5209    0.3000
+           %                  0.9635    0.2892    1.0000   -0.4431    0.3000
+           %                 -0.5412   -0.5209   -0.4431    1.0000    0.3559
+           %                  0.3000    0.3000    0.3000    0.3559    1.0000];
+
+                   rho_state{j} = patternedBlockCorrelation(num_metabolites, ...
                                                 .7, ...
                                                 20, ...
                                                 20,...
@@ -43,27 +51,25 @@ for missing_iter = 1:missing_iters
         subject_data_mask{l} = rand(1,num_metabolites) < p; % 1 if non-missing
     end
 
-%%%DEBUG%%%%
-    % % Ensure at least one lab per pair
-    % for i1 = 1:num_metabolites
-    %     for i2 = 1:num_metabolites
-    %         in_at_least_one = false;
-    %         for l=1:num_labs
-    %             if subject_data_mask{l}(i1)==1 && ...
-    %                     subject_data_mask{l}(i2)==1
-    %                 in_at_least_one = true;
-    %             end
-    %         end
-    %         if ~in_at_least_one
-    %             % Randomly choose a lab
-    %             forceL = randi(num_labs);
-    %             % Force forceL to have both
-    %             subject_data_mask{forceL}(i1) = 1;
-    %             subject_data_mask{forceL}(i2) = 1;
-    %         end
-    %     end
-    % end
-%%%%%%%%%%%
+    % Ensure at least one lab per pair
+    for i1 = 1:num_metabolites
+        for i2 = 1:num_metabolites
+            in_at_least_one = false;
+            for l=1:num_labs
+                if subject_data_mask{l}(i1)==1 && ...
+                        subject_data_mask{l}(i2)==1
+                    in_at_least_one = true;
+                end
+            end
+            if ~in_at_least_one
+                % Randomly choose a lab
+                forceL = randi(num_labs);
+                % Force forceL to have both
+                subject_data_mask{forceL}(i1) = 1;
+                subject_data_mask{forceL}(i2) = 1;
+            end
+        end
+    end
 
     % Ensure at least two non-missing in each lab
     for l=1:num_labs
@@ -73,16 +79,16 @@ for missing_iter = 1:missing_iters
             end
         end
     end
+
+
+
     
     %% Begin Monte Carlo Loop
     
     final_rho_estimates = {};
 
-    %%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%
-    CIs = {};
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    MC_STEPS = 20;
+    MC_STEPS = 20%a00%00;
     for mc_step = 1:MC_STEPS
         
         [reported_spearman,...
@@ -128,6 +134,8 @@ for missing_iter = 1:missing_iters
                                                 'UniformOutput',false);
         reported_fisher_vecL = cellfun(@vecL,reported_fisher,...
                                             'UniformOutput',false);
+
+
         
         
         % For each l, find the permutation matrix P_l that puts missing entries 
@@ -145,7 +153,7 @@ for missing_iter = 1:missing_iters
         end
         
         
-        MAX_EM_ITERATIONS = 500; % Outer loop
+        MAX_EM_ITERATIONS = 500%00; % Outer loop
         MAX_GD_ITERATIONS = 1; % Inner PGD loop
         GD_TOLERANCE = 1;
         GD_LEARNING_RATE = 100*(.2/num_labs)/max(n_samples);
@@ -175,9 +183,38 @@ for missing_iter = 1:missing_iters
                 speye(num_metabolites*(num_metabolites-1)/2);  
             sigma_rho_est_no_proj{j} = sigma_rho_est{j}; % NCP = false
         end
-        
-        w = 1./n_samples; % Lab-wise weighting factor for ...
+
+        w = 1./(n_samples-3); % Lab-wise weighting factor for ...
                                          % variances (L vector)
+
+
+    %%%%% DEBUG %%%%%%%
+    
+    %actual_var = (n_samples(1)-3)*var(cat(3,reported_fisher{:}),0,3);       
+    rl_bar = sum(cat(3,reported_fisher{:}),3)./...
+            (sum(cat(3,reported_spearman_mask{:}),3)+eps);
+
+    var_est = sum(((cat(3,reported_spearman_mask{:})).*...
+        (cat(3,reported_fisher{:})-repmat(rl_bar,[1,1,num_labs])).^2),3)./...
+            (-1+sum(cat(3,reported_spearman_mask{:}),3)+eps);
+
+    actual_var = (n_samples(1)-3)*var_est;
+
+    
+    actual_std = sqrt(actual_var);
+
+    variance_est = estimateCovOfReportedFisher(reported_fisher, ...
+                                                reported_spearman_mask, ...
+                                                num_labs, ...
+                                                n_samples);
+
+    %%%%%%%%%%%%%%%%%%%
+
+
+          %%%% DEBUG %%%%%
+
+        sigma_rho_est{1} = diag(diag(variance_est));%diag(vecL(actual_var));
+          %%%%%%%%%%%%%%%%
         
         % Metrics to track for plotting. All should have prefix plotvar
         %plotvar_mse = {};  %rho mse
@@ -281,8 +318,6 @@ for missing_iter = 1:missing_iters
         
            
         end
-
-
         final_rho_estimates{mc_step} = {};
         final_rho_estimates_no_proj{mc_step} = {};
         for j=1:r
@@ -293,36 +328,20 @@ for missing_iter = 1:missing_iters
                         {1,order_no_proj(j)}); % last inferred order
         end
 
-        % 
-        % %%%%%%%%%%%%%%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%%%%%%%%%%
-        % 
-        %     FI_est = louisFisherEst(...
-        %                                         alpha_est,...
-        %                                         rho_est,...
-        %                                         sigma_rho_est, ...
-        %                                         X, ...
-        %                                         P, ...
-        %                                         w, ...
-        %                                         GD_LEARNING_RATE,...
-        %                                         MAX_GD_ITERATIONS, ...
-        %                                         GD_TOLERANCE, ...
-        %                                         false, ...
-        %                                         0, ...
-        %                                         em_iter);
-        %     rho_FI_est = FI_est(max(1,r-1):end,max(1,r-1):end); % only rho part
-        %     a = .05; 
-        %     std_err = vecLInverse(sqrt(abs(diag(inv(rho_FI_est)))));
-        %     %disp(std_err');
-        %     j=1;
-        %     CI_upper = final_rho_estimates{mc_step}{j} + norminv(1-a/2)*std_err;
-        %     CI_lower = final_rho_estimates{mc_step}{j} - norminv(1-a/2)*std_err;
-        %     CI = {CI_lower CI_upper};
-        %     %disp(CI)
-        %     CIs{missing_iter}{mc_step} = CI;
-        % 
-        % 
-        % %%%%%%%%%%%%%%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%%%%%%%%%%
-        % 
+                %%%%%%%%%%%%%%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%%%%%%%%%%
+
+            CIs{missing_iter}{mc_step} = getRhoConfidenceIntervals(...
+                                                alpha_est,...
+                                                rho_est,...
+                                                sigma_rho_est, ...
+                                                X, ...
+                                                P, ...
+                                                w, ...
+                                                1);
+
+            
+        %%%%%%%%%%%%%%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%%%%%%%%%%
+    
         naive_rho = ...
             sum(cat(3,reported_pearson{:}),3)./...
             (sum(cat(3,reported_spearman_mask{:}),3)+eps); 
@@ -399,17 +418,8 @@ save(save_filename);
 LOAD_FILENAME = [];
 
 %LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260627_160242.mat";
-%LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260812_002107.mat" %30
-%missingnesses (one component)
-%LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260812_123859.mat" %30
-%missingnesses (two component)
-%LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260818_232835.mat"
-% ^ test run with CIs (not fully complete code)
-
-LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260821_111741.mat"
 
 if ~isempty(LOAD_FILENAME)
-    disp("Using saved file.")
     load(LOAD_FILENAME);
 else
     load(save_filename);
@@ -537,20 +547,21 @@ end
 %% TEMPORARY -- remove this -- this is debug code for CIs
 % coverage prob = percent of cis that contain the true rho
      %   i = 48; j = 4; % look at (i,j) correlation component
-% for missing_iter = 3:missing_iters
-%     for i=1:num_metabolites
-%         for j=1:num_metabolites
-%             total = 0;
-%             for mc_step = 1:MC_STEPS
-%                 if CIs{missing_iter}{mc_step}{1}(i,j) <= true_rho{1}(i,j) && ...
-%                         true_rho{1}(i,j) <= CIs{missing_iter}{mc_step}{2}(i,j)
-%                     total = total + 1;
-%                 end
-%             end
-%             cov_prob(i,j) = total/length(CIs{missing_iter});
-%         end
-%     end
-%     figure,
-%     title(strcat("Missingness: ",string(missingnesses(missing_iter))))
-%     heatmap(cov_prob)
-% end
+for missing_iter = 1:missing_iters
+    for i=1:num_metabolites
+        for j=1:num_metabolites
+            total = 0;
+            for mc_step = 1:MC_STEPS
+                true_rho_fish = atanh(true_rho{1}(i,j));
+                if CIs{missing_iter}{mc_step}{1}(i,j) <= true_rho_fish && ...
+                        true_rho_fish <= CIs{missing_iter}{mc_step}{2}(i,j)
+                    total = total + 1;
+                end
+            end
+            cov_prob(i,j) = total/length(CIs{missing_iter});
+        end
+    end
+    figure,
+    title(strcat("Missingness: ",string(missingnesses(missing_iter))))
+    heatmap(cov_prob)
+end

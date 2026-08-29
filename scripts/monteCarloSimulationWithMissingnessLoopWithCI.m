@@ -5,9 +5,14 @@ addpath('../src')
 
 metrics_by_missingness = {};
 
+
+CIs = {};
+CIs_noproj = {};
+
 missing_iters = 30; %.0 to .9 = 1 to 10
 max_mi = 1;
-missingnesses = ((1:missing_iters)-1)*(max_mi/missing_iters);
+missingnesses = ((1:missing_iters)-1)*(max_mi/missing_iters); % .7:.05:.95%
+missing_iters = length(missingnesses); % DEBUG
 for missing_iter = 1:missing_iters
     
     %% Fix Parameters
@@ -78,9 +83,6 @@ for missing_iter = 1:missing_iters
     
     final_rho_estimates = {};
 
-    %%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%
-    CIs = {};
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     MC_STEPS = 20;
     for mc_step = 1:MC_STEPS
@@ -179,6 +181,17 @@ for missing_iter = 1:missing_iters
         w = 1./n_samples; % Lab-wise weighting factor for ...
                                          % variances (L vector)
         
+        tic
+        variance_est = estimateCovOfReportedFisher(reported_fisher, ...
+                reported_spearman_mask, ...
+                num_labs, ...
+                n_samples);
+
+        sigma_rho_est{1} = variance_est;%diag(diag(variance_est));
+        sigma_rho_est_no_proj = sigma_rho_est;
+        clear variance_est;
+        disp(toc);
+
         % Metrics to track for plotting. All should have prefix plotvar
         %plotvar_mse = {};  %rho mse
         %plotvar_bias = {}; %rho bias
@@ -249,7 +262,9 @@ for missing_iter = 1:missing_iters
             %                    gradient descent to converge in each step
             % GD_TOLERANCE: If the gradient steps fall below this tolerance, the 
             %               gradient descent loop will cease.
-        
+
+            % Note rho_est is the fisher transformed variable
+            % This is liable to cause confusion. Should rename. TODO
             [alpha_est,rho_est,sigma_rho_est] = argmaxQFisher(...
                                                         alpha_est,...
                                                         rho_est,...
@@ -323,6 +338,26 @@ for missing_iter = 1:missing_iters
         % 
         % %%%%%%%%%%%%%%%%%%%%%%% TEMPORARY -- FIX THIS %%%%%%%%%%%%%%%%%%%
         % 
+
+        CIs{missing_iter}{mc_step} = getRhoConfidenceIntervals(...
+                                            alpha_est,...
+                                            rho_est,...
+                                            sigma_rho_est, ...
+                                            X, ...
+                                            P, ...
+                                            w, ...
+                                            1);
+
+        % The confidence interval for the no proj is exactly the same 
+        % calculation but with different inputs 
+        CIs_noproj{missing_iter}{mc_step} = getRhoConfidenceIntervals(...
+                                            alpha_est_no_proj,...
+                                            rho_est_no_proj,...
+                                            sigma_rho_est_no_proj, ...
+                                            X, ...
+                                            P, ...
+                                            w, ...
+                                            1);
         naive_rho = ...
             sum(cat(3,reported_pearson{:}),3)./...
             (sum(cat(3,reported_spearman_mask{:}),3)+eps); 
@@ -405,11 +440,9 @@ LOAD_FILENAME = [];
 %missingnesses (two component)
 %LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260818_232835.mat"
 % ^ test run with CIs (not fully complete code)
-
-LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260821_111741.mat"
+LOAD_FILENAME = "../artifacts/mc_ml_runs/mc_ml_run_20260825_034043.mat"
 
 if ~isempty(LOAD_FILENAME)
-    disp("Using saved file.")
     load(LOAD_FILENAME);
 else
     load(save_filename);
@@ -426,6 +459,12 @@ mse_by_mprob_nearcorr = [];
 mse_by_mprob_no_proj = [];
 mse_by_mprob_naive = [];
 
+
+band_lower_nc = [];
+band_upper_nc = [];
+band_lower_noproj = [];
+band_upper_noproj = [];
+
 for j=1:r
     figure,
     
@@ -437,6 +476,7 @@ for j=1:r
         mse_by_mprob_naive(i) = ...
             mean(metrics_by_missingness{i}.naive.mae{j},'all');
 
+
         % 
         % mse_by_mprob_nearcorr(i) = ...
         %     metrics_by_missingness{i}.nearcorr.medae{j}(a,b);
@@ -445,91 +485,174 @@ for j=1:r
         % mse_by_mprob_naive(i) = ...
         %     metrics_by_missingness{i}.naive.medae{j}(a,b);
     end
-    
+
+
     hold on;
-    plot(missingnesses,mse_by_mprob_nearcorr,'Color','blue','DisplayName','EM with projection');
-    plot(missingnesses,mse_by_mprob_no_proj,'Color','red','DisplayName','EM w/o projection');
+    p1 = plot(missingnesses,mse_by_mprob_nearcorr,'Color','blue','DisplayName','EM with projection');
+    p2 = plot(missingnesses,mse_by_mprob_no_proj,'Color','red','DisplayName','EM w/o projection');
+    p1.LineWidth = 2;
+    p1.Marker = "*";
+    p2.LineWidth = 2;
+    p2.Marker = "o";
     % Only plot the naive if there are more than one component
     % Otherwise its too confusing
-    if r<=1
-        plot(missingnesses,mse_by_mprob_naive,'Color','green','DisplayName','Naive');
+    % if r<=1
+    %     plot(missingnesses,mse_by_mprob_naive,'Color','green','DisplayName','Naive');
+    % end
+    if r>1
+        title(strcat("Component: ",string(j)))
+    else
+        title("")
     end
-    title(strcat("Component: ",string(j)))
     legend('Location','best')
     hold off;
-end
-
-% Then create a plot where all the components are on the same plot
-
-figure,
-hold on
-grid on
-%title("ALL on same plot")
-
-for j=1:r
-    figure,
-    for a=1:(num_metabolites-1)
-        for b=(a+1):num_metabolites
-            
-            mse_by_mprob_nearcorr = [];
-            mse_by_mprob_no_proj = [];
-            mse_by_mprob_naive = [];
-            
-                
-                for i=1:missing_iters
-                    % mse_by_mprob_nearcorr(i) = ...
-                    %     mean(metrics_by_missingness{i}.nearcorr.medae{j},'all');
-                    % mse_by_mprob_no_proj(i) = ...
-                    %     mean(metrics_by_missingness{i}.no_proj.medae{j},'all');
-                    % mse_by_mprob_naive(i) = ...
-                    %     mean(metrics_by_missingness{i}.naive.medae{j},'all');
-            
-            
-                    mse_by_mprob_nearcorr(i) = ...
-                        metrics_by_missingness{i}.nearcorr.bias{j}(a,b);
-                    mse_by_mprob_no_proj(i) = ...
-                        metrics_by_missingness{i}.no_proj.bias{j}(a,b);
-                    mse_by_mprob_naive(i) = ...
-                        metrics_by_missingness{i}.naive.bias{j}(a,b);
-                end
-                hold on
-                p=plot(missingnesses*100,mse_by_mprob_nearcorr,'Color','blue',...
-                    'LineWidth',.02);
-                p.Color(4) = .05;
-                p2=plot(missingnesses*100,mse_by_mprob_no_proj,'Color','red',...
-                    'LineWidth',.02);
-                p2.Color(4) = .05;           
-                if r<=1
-                    p3=plot(missingnesses*100,mse_by_mprob_naive,'Color','green',...
-                       'LineWidth',.02);
-                    p3.Color(4) = .05;      
-                end
-               % p.Color(4) = .3;
-
-                hold off
-                % p.Color(4) = .5;
-               % plot(missingnesses,mse_by_mprob_naive,'Color','green',...
-               %     'LineWidth',.2);
-               % p.Color(4) = .3;
-                % xlim([0,.6]);
-                % ylim([-.05,.05]);
-    
-
-                xlim([0,100]);
-                ylim([-.5,.5]);
-                ylabel("Estimate - True")
-                xlabel("Average Percent Variables Missing ")
-               % title("Monte-Carlo Bias Estimates for all Pairwise Correlations")
-                title(strcat("Component: ",string(j)))
-            
-        end
     end
-hold off
+
 set(gcf,'Color','white')
 set(gcf, 'Position', [100, 100, 800, 400])
 set(gcf, 'InvertHardcopy', 'off'); 
 set(gcf, 'PaperPositionMode', 'auto');
+grid on
+xlabel("Proportion of metabolites missing");
+ylabel("Mean Absolute Error (Component Average)")
+xlim([.5,.95])
+
+% plot a few components on different figures with CIs and true 
+if r<=1
+    for a=[1,2,25,30]
+        for b=[2,25,28,49]
+            figure,
+
+            band_lower_nc = zeros(missing_iters,1);
+            band_upper_nc = zeros(missing_iters,1);
+            band_lower_noproj = zeros(missing_iters,1);
+            band_upper_noproj = zeros(missing_iters,1);
+
+            final_est = [];
+            final_est_no_proj = [];
+            
+            % average over the mc_steps, index over the missingnesses
+            for mc_step = 1:MC_STEPS
+                for miss = 1:25
+                    band_lower_nc(miss) = band_lower_nc(miss) + ...
+                        CIs{miss}{mc_step}{1}(a,b);
+                    band_upper_nc(miss) = band_upper_nc(miss) + ...
+                        CIs{miss}{mc_step}{2}(a,b);
+                    band_lower_noproj(miss) = band_lower_noproj(miss) + ...
+                        CIs_noproj{miss}{mc_step}{1}(a,b);
+                    band_upper_noproj(miss) = band_upper_noproj(miss) + ...
+                        CIs_noproj{miss}{mc_step}{2}(a,b);
+
+                end
+            end
+            band_lower_nc = max(band_lower_nc / MC_STEPS,-100);
+            band_upper_nc = min(band_upper_nc / MC_STEPS,100);
+            band_lower_noproj = max(band_lower_noproj / MC_STEPS,-100);
+            band_upper_noproj = min(band_upper_noproj / MC_STEPS,100);
+
+
+            
+            xconf = [missingnesses missingnesses(end:-1:1)] ;         
+            yconf = [ band_lower_nc' band_upper_nc(end:-1:1)'];
+            y2conf = [ band_lower_noproj' band_upper_noproj(end:-1:1)'];
+            
+            hold on
+            p = fill(xconf,yconf,'blue','DisplayName','EM with projection');
+            p.FaceColor = [.8 0.8 1];         
+            p.EdgeColor = 'none';   
+            p.FaceAlpha = .5;
+
+
+            p2 = fill(xconf,y2conf,'red','DisplayName','EM w/o projection');
+            p2.EdgeColor = 'none';   
+            p2.FaceColor = [1 0.8 0.8];   
+            p2.FaceAlpha = .5;
+
+            %ylim([-.9,.9])
+            xlim([missingnesses(1),missingnesses(25)]);
+
+            legend
+            grid on
+            title(strcat("(i,j) = (",string(a),",",string(b),")"))
+            %plot()
+            %plot(x,y,'ro')
+            hold off
+        end
+    end
 end
+
+% 
+% Then create a plot where all the components are on the same plot
+% 
+% figure,
+% hold on
+% grid on
+% title("ALL on same plot")
+% 
+% for j=1:r
+%     figure,
+%     for a=1:(num_metabolites-1)
+%         for b=(a+1):num_metabolites
+% 
+%             mse_by_mprob_nearcorr = [];
+%             mse_by_mprob_no_proj = [];
+%             mse_by_mprob_naive = [];
+% 
+% 
+%                 for i=1:missing_iters
+%                     mse_by_mprob_nearcorr(i) = ...
+%                         mean(metrics_by_missingness{i}.nearcorr.medae{j},'all');
+%                     mse_by_mprob_no_proj(i) = ...
+%                         mean(metrics_by_missingness{i}.no_proj.medae{j},'all');
+%                     mse_by_mprob_naive(i) = ...
+%                         mean(metrics_by_missingness{i}.naive.medae{j},'all');
+% 
+% 
+%                     mse_by_mprob_nearcorr(i) = ...
+%                         metrics_by_missingness{i}.nearcorr.bias{j}(a,b);
+%                     mse_by_mprob_no_proj(i) = ...
+%                         metrics_by_missingness{i}.no_proj.bias{j}(a,b);
+%                     mse_by_mprob_naive(i) = ...
+%                         metrics_by_missingness{i}.naive.bias{j}(a,b);
+%                 end
+%                 hold on
+%                 p=plot(missingnesses*100,mse_by_mprob_nearcorr,'Color','blue',...
+%                     'LineWidth',.02);
+%                 p.Color(4) = .05;
+%                 p2=plot(missingnesses*100,mse_by_mprob_no_proj,'Color','red',...
+%                     'LineWidth',.02);
+%                 p2.Color(4) = .05;           
+%                 if r<=1
+%                     p3=plot(missingnesses*100,mse_by_mprob_naive,'Color','green',...
+%                        'LineWidth',.02);
+%                     p3.Color(4) = .05;      
+%                 end
+%                p.Color(4) = .3;
+% 
+%                 hold off
+%                 p.Color(4) = .5;
+%                plot(missingnesses,mse_by_mprob_naive,'Color','green',...
+%                    'LineWidth',.2);
+%                p.Color(4) = .3;
+%                 xlim([0,.6]);
+%                 ylim([-.05,.05]);
+% 
+% 
+%                 xlim([0,100]);
+%                 ylim([-.5,.5]);
+%                 ylabel("Estimate - True")
+%                 xlabel("Average Percent Variables Missing ")
+%                title("Monte-Carlo Bias Estimates for all Pairwise Correlations")
+%                 title(strcat("Component: ",string(j)))
+% 
+%         end
+%     end
+% hold off
+% set(gcf,'Color','white')
+% set(gcf, 'Position', [100, 100, 800, 400])
+% set(gcf, 'InvertHardcopy', 'off'); 
+% set(gcf, 'PaperPositionMode', 'auto');
+% end
 
 % mc_ml_run_20260812_002107.mat -- for 1 component with 30 missingnesses,
 % 20 mc runs per iteration, 500 EM steps
@@ -554,3 +677,26 @@ end
 %     title(strcat("Missingness: ",string(missingnesses(missing_iter))))
 %     heatmap(cov_prob)
 % end
+
+%% Plot the Coverage probabilites for CIs
+% coverage prob = percent of cis that contain the true rho
+     %   i = 48; j = 4; % look at (i,j) correlation component
+ for missing_iter = 1:missing_iters
+    %missing_iter = 5;
+    for i=1:num_metabolites
+        for j=1:num_metabolites
+            total = 0;
+            for mc_step = 1:MC_STEPS
+                true_rho_fish = atanh(true_rho{1}(i,j));
+                if CIs{missing_iter}{mc_step}{1}(i,j) <= true_rho_fish && ...
+                        true_rho_fish <= CIs{missing_iter}{mc_step}{2}(i,j)
+                    total = total + 1;
+                end
+            end
+            cov_prob(i,j) = total/length(CIs{missing_iter});
+        end
+    end
+    figure,
+    heatmap(cov_prob),
+    title(strcat("Missingness: ",string(missingnesses(missing_iter))))
+ end

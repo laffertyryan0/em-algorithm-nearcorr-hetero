@@ -9,16 +9,16 @@ USE_REAL_DATA = false;
    
 
 if ~USE_REAL_DATA
-    num_metabolites = 50; %k
+    num_metabolites = 5%0; %k
     num_labs = 60; %L
-    average_fraction_missing_metabolites = 0.5;
+    average_fraction_missing_metabolites = 0.7;
     num_mixture_components = 1; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
     num_subjects_per_lab = ones(num_labs,1)*1000; 
     random_seed = 26;    
 
     rho_state = {};
-    for j=1:r
+    for j=1:num_mixture_components
         rho_state{j} = randomCorrelationMatrix(num_metabolites);
         if j==2
             rho_state{j} = eye(num_metabolites,num_metabolites);
@@ -183,7 +183,7 @@ for j = 1:r
         speye(num_metabolites*(num_metabolites-1)/2);  
 end
 
-w = 1000./n_samples; % Lab-wise weighting factor for ...
+w = 1./n_samples; % Lab-wise weighting factor for ...
                                  % variances (L vector)
 
 % Metrics to track for plotting. All should have prefix plotvar
@@ -266,6 +266,27 @@ for em_iter=1:MAX_EM_ITERATIONS
 
    
 end
+
+    rho_FI_est = louisFisherEst(...
+                                                alpha_est,...
+                                                rho_est,...
+                                                sigma_rho_est, ...
+                                                X, ...
+                                                P, ...
+                                                w, ...
+                                                GD_LEARNING_RATE,...
+                                                MAX_GD_ITERATIONS, ...
+                                                GD_TOLERANCE, ...
+                                                INIT_GDVARS_RANDLY, ...
+                                                NEARCORR_PROJ, ...
+                                                em_iter);
+    a = .05;
+    std_err = sqrt(abs(diag(inv(rho_FI_est))));
+    disp(std_err');
+    CI_upper = rho_est{1} + norminv(1-a/2)*std_err;
+    CI_lower = rho_est{1} - norminv(1-a/2)*std_err;
+    CI = [CI_lower CI_upper];
+    disp(CI)
 
 %pearson_rho_est is the final estimate for the mean correlation matrix
 
