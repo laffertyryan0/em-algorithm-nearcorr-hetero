@@ -9,9 +9,9 @@ USE_REAL_DATA = false;
    
 
 if ~USE_REAL_DATA
-    num_metabolites = 5%0; %k
+    num_metabolites = 50; %k
     num_labs = 60; %L
-    average_fraction_missing_metabolites = 0.7;
+    average_fraction_missing_metabolites = 0.4;
     num_mixture_components = 1; %r
     mixing_probabilities = ones(1,num_mixture_components)/num_mixture_components;
     num_subjects_per_lab = ones(num_labs,1)*1000; 
@@ -77,7 +77,9 @@ elseif USE_REAL_DATA
     reported_spearman_mask = {};
     n_samples = [];
     
-    for file = files'
+    for file = files'        
+        disp("Getting data from:")
+        disp(file.name)
         data = readtable(fullfile(data_directory,file.name));
         correlation_matrix = zeros(size(uid_list)); 
         mask_matrix = zeros(size(uid_list));
@@ -160,7 +162,7 @@ for l=1:num_labs
 end
 
 
-MAX_EM_ITERATIONS = 30; % Outer loop
+MAX_EM_ITERATIONS = 500%30; % Outer loop
 MAX_GD_ITERATIONS = 1; % Inner PGD loop
 GD_TOLERANCE = 1;
 GD_LEARNING_RATE = 100*(.2/num_labs)/max(n_samples);
@@ -185,6 +187,13 @@ end
 
 w = 1./n_samples; % Lab-wise weighting factor for ...
                                  % variances (L vector)
+
+variance_est = estimateCovOfReportedFisher(reported_fisher, ...
+                                            reported_spearman_mask, ...
+                                            num_labs, ...
+                                            n_samples);
+
+sigma_rho_est{1} = variance_est;
 
 % Metrics to track for plotting. All should have prefix plotvar
 plotvar_mse = {};  %rho mse
@@ -267,26 +276,15 @@ for em_iter=1:MAX_EM_ITERATIONS
    
 end
 
-    rho_FI_est = louisFisherEst(...
-                                                alpha_est,...
-                                                rho_est,...
-                                                sigma_rho_est, ...
-                                                X, ...
-                                                P, ...
-                                                w, ...
-                                                GD_LEARNING_RATE,...
-                                                MAX_GD_ITERATIONS, ...
-                                                GD_TOLERANCE, ...
-                                                INIT_GDVARS_RANDLY, ...
-                                                NEARCORR_PROJ, ...
-                                                em_iter);
-    a = .05;
-    std_err = sqrt(abs(diag(inv(rho_FI_est))));
-    disp(std_err');
-    CI_upper = rho_est{1} + norminv(1-a/2)*std_err;
-    CI_lower = rho_est{1} - norminv(1-a/2)*std_err;
-    CI = [CI_lower CI_upper];
-    disp(CI)
+
+    CI = getRhoConfidenceIntervals(...
+                                    alpha_est,...
+                                    rho_est,...
+                                    sigma_rho_est, ...
+                                    X, ...
+                                    P, ...
+                                    w, ...
+                                    1);
 
 %pearson_rho_est is the final estimate for the mean correlation matrix
 
@@ -294,27 +292,55 @@ end
 
 % 1) A plot of MSE for each of the mixture components
 
-figure,
-title("\rho_j Mean Squared Error")
-hold on
-labels = {};
-for j=1:r
-    plot(1:MAX_EM_ITERATIONS,plotvar_mse{j})
-    labels{j} = strcat("Component ",num2str(j));
+if ~USE_REAL_DATA
+    figure,
+    title("\rho_j Mean Squared Error")
+    hold on
+    labels = {};
+    for j=1:r
+        plot(1:MAX_EM_ITERATIONS,plotvar_mse{j})
+        labels{j} = strcat("Component ",num2str(j));
+    end
+    legend(labels)
+    ylabel("MSE")
+    xlabel("EM Iteration")
+    hold off
+    
+    figure,
+    title("\rho_j Average Bias")
+    hold on
+    for j=1:r
+        plot(1:MAX_EM_ITERATIONS,plotvar_bias{j})
+        labels{j} = strcat("Component ",num2str(j));
+    end
+    legend(labels)
+    ylabel("Error")
+    xlabel("EM Iteration")
+    hold off
 end
-legend(labels)
-ylabel("MSE")
-xlabel("EM Iteration")
-hold off
 
-figure,
-title("\rho_j Average Bias")
-hold on
 for j=1:r
-    plot(1:MAX_EM_ITERATIONS,plotvar_bias{j})
-    labels{j} = strcat("Component ",num2str(j));
+    mat_rho_est = vecLInverse(rho_est_fisherinv{j});
+    figure,
+    heatmap(mat_rho_est);
 end
-legend(labels)
-ylabel("Error")
-xlabel("EM Iteration")
-hold off
+figure,
+heatmap(mean(cat(3,reported_spearman_mask{:}),3));
+
+if r<=1
+    rho_est_fish = vecLInverse(rho_est{1});
+    row = rho_est_fish(1,2:end);
+    CI_lower_fish = CI{1}(1,2:end);
+    CI_upper_fish = CI{2}(1,2:end);
+    pear_row = tanh(row);
+    pear_upper = tanh(CI_upper_fish);
+    pear_lower = tanh(CI_lower_fish);
+    figure,
+    hold on
+    errorbar(2:(1+length(pear_row)),...
+                pear_row,pear_row-pear_lower, ...
+                -pear_row+pear_upper, ...
+                'o');
+    hold off
+
+end
