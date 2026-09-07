@@ -195,6 +195,14 @@ while iteration <= max_iterations
     %           to convert to matrix form, apply projection, and convert
     %           back to vector form. 
 
+    % EXPERIMENTAL: H-Weight by average number of data points 
+    avgs = zeros(len_rho,1);
+    for l=1:L
+        avgs = avgs + ...
+            P{l}'*[ones(length(X{l}),1) ; zeros(length(mu_Z_given_X{l}),1)];
+    end
+    avgs = vecLInverse(avgs);
+
                 if(NEARCORR_PROJ)
                     for j=1:r
                         matrix_rho_tilde = vecLInverse(rho_tilde{j});
@@ -203,7 +211,8 @@ while iteration <= max_iterations
                         matrix_rho_tilde(logical(eye(k))) = 1;
                         matrix_rho_tilde = ensureValidNearCorrInput(...
                                                 matrix_rho_tilde,.01);
-                        matrix_rho_tilde = nearcorr(matrix_rho_tilde);
+                        matrix_rho_tilde = nearcorr(matrix_rho_tilde);%, ...
+                          %  'Weights',avgs);
                         % Fisher transformation
                         matrix_rho_tilde = atanh(matrix_rho_tilde);
                         rho_tilde{j} = vecL(matrix_rho_tilde);

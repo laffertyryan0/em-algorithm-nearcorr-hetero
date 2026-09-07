@@ -9,7 +9,7 @@ CIs = {};
 
 missing_iters = 3; %.0 to .9 = 1 to 10
 max_mi = .9;
-missingnesses = [.7,.8,.9]%((1:missing_iters)-1)*(max_mi/missing_iters);
+missingnesses = [.9]%((1:missing_iters)-1)*(max_mi/missing_iters);
 for missing_iter = 1:missing_iters
     
     %% Fix Parameters
@@ -50,26 +50,26 @@ for missing_iter = 1:missing_iters
     for l=1:num_labs;
         subject_data_mask{l} = rand(1,num_metabolites) < p; % 1 if non-missing
     end
-
+    % 
     % Ensure at least one lab per pair
-    for i1 = 1:num_metabolites
-        for i2 = 1:num_metabolites
-            in_at_least_one = false;
-            for l=1:num_labs
-                if subject_data_mask{l}(i1)==1 && ...
-                        subject_data_mask{l}(i2)==1
-                    in_at_least_one = true;
-                end
-            end
-            if ~in_at_least_one
-                % Randomly choose a lab
-                forceL = randi(num_labs);
-                % Force forceL to have both
-                subject_data_mask{forceL}(i1) = 1;
-                subject_data_mask{forceL}(i2) = 1;
-            end
-        end
-    end
+    % for i1 = 1:num_metabolites
+    %     for i2 = 1:num_metabolites
+    %         in_at_least_one = false;
+    %         for l=1:num_labs
+    %             if subject_data_mask{l}(i1)==1 && ...
+    %                     subject_data_mask{l}(i2)==1
+    %                 in_at_least_one = true;
+    %             end
+    %         end
+    %         if ~in_at_least_one
+    %             Randomly choose a lab
+    %             forceL = randi(num_labs);
+    %             Force forceL to have both
+    %             subject_data_mask{forceL}(i1) = 1;
+    %             subject_data_mask{forceL}(i2) = 1;
+    %         end
+    %     end
+    % end
 
     % Ensure at least two non-missing in each lab
     for l=1:num_labs

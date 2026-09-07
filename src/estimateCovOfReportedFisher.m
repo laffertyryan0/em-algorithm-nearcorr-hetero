@@ -42,11 +42,8 @@ function covR = estimateCovOfReportedFisher(reported_fisher, ...
 
     % Ensure PSD
 
-    tic
     while min(eig(covR))<0
         covR = speye(size(covR)).*covR + (1-speye(size(covR))).*covR * .5;
     end
-    disp("Eigenvalue loop")
-    disp(toc)
 
     covR = sparse(covR);
